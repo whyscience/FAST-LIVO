@@ -10,7 +10,7 @@ using namespace std;
 typedef pcl::PointXYZINormal PointType;
 typedef pcl::PointCloud<PointType> PointCloudXYZI;
 
-enum LID_TYPE{AVIA = 1, VELO16, OUST64, XT32}; //{1, 2, 3}
+enum LID_TYPE{AVIA = 1, VELO16, OUST64, XT32, MID360}; //{1, 2, 3}
 enum Feature{Nor, Poss_Plane, Real_Plane, Edge_Jump, Edge_Plane, Wire, ZeroPoint};
 enum Surround{Prev, Next};
 enum E_jump{Nr_nor, Nr_zero, Nr_180, Nr_inf, Nr_blind};
@@ -47,7 +47,27 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(velodyne_ros::Point,
     (float, y, y)
     (float, z, z)
     (float, intensity, intensity)
-    (uint16_t, ring, ring)
+    (std::uint16_t, ring, ring)
+)
+
+namespace livox_ros {
+    struct EIGEN_ALIGN16 Point {
+            PCL_ADD_POINT4D;
+            float intensity;
+            uint8_t tag;
+            uint8_t line;
+            double timestamp;
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    };
+}  // namespace livox_ros
+POINT_CLOUD_REGISTER_POINT_STRUCT(livox_ros::Point,
+    (float, x, x)
+    (float, y, y)
+    (float, z, z)
+    (float, intensity, intensity)
+    (std::uint8_t, tag, tag)
+    (std::uint8_t, line, line)
+    (double, timestamp, timestamp)
 )
 
 namespace ouster_ros {
@@ -63,19 +83,24 @@ namespace ouster_ros {
   };
 }  // namespace ouster_ros
 
-namespace xt32_ros
-{
+namespace xt32_ros {
 struct EIGEN_ALIGN16 Point
-{
-  PCL_ADD_POINT4D;
-  float intensity;
-  double timestamp;
-  uint16_t ring;
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-};
+    {
+      PCL_ADD_POINT4D;
+      float intensity;
+      double timestamp;
+      uint16_t ring;
+      EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    };
 } // namespace xt32_ros
 POINT_CLOUD_REGISTER_POINT_STRUCT(xt32_ros::Point,
-                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(double, timestamp, timestamp)(uint16_t, ring, ring))
+    (float, x, x)
+    (float, y, y)
+    (float, z, z)
+    (float, intensity, intensity)
+    (double, timestamp, timestamp)
+    (std::uint16_t, ring, ring)
+)
 
 
 // clang-format off
@@ -116,6 +141,7 @@ class Preprocess
 
   private:
   void avia_handler(const livox_ros_driver2::CustomMsg::ConstPtr &msg);
+  void mid360_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void oust64_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void xt32_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);

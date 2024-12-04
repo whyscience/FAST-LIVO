@@ -61,7 +61,11 @@ void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointClo
   case XT32:
     xt32_handler(msg);
     break;
-  
+
+  case MID360:
+    mid360_handler(msg);
+    break;
+
   default:
     printf("Error LiDAR Type");
     break;
@@ -160,6 +164,107 @@ void Preprocess::avia_handler(const livox_ros_driver2::CustomMsg::ConstPtr &msg)
     }
   }
 }
+
+void Preprocess::mid360_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
+{
+    pl_surf.clear();
+    pl_corn.clear();
+    pl_full.clear();
+    double t1 = omp_get_wtime();
+
+    pcl::PointCloud<livox_ros::Point> pl_orig;
+    pcl::fromROSMsg(*msg, pl_orig);
+    uint plsize = pl_orig.size();
+
+    pl_corn.reserve(plsize);
+    pl_surf.reserve(plsize);
+    pl_full.resize(plsize);
+
+    for (int i = 0; i < N_SCANS; i++)
+    {
+        pl_buff[i].clear();
+        pl_buff[i].reserve(plsize);
+    }
+
+    uint valid_num = 0;
+
+    if (feature_enabled)
+    {
+        for (uint i = 1; i < plsize; i++)
+        {
+            if ((abs(pl_orig.points[i].x - pl_orig.points[i - 1].x) < 1e-8) ||
+                (abs(pl_orig.points[i].y - pl_orig.points[i - 1].y) < 1e-8) ||
+                (abs(pl_orig.points[i].z - pl_orig.points[i - 1].z) < 1e-8) ||
+                (pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y < blind) ||
+                (pl_orig.points[i].line >= N_SCANS) ||
+                ((pl_orig.points[i].tag & 0x30) != RETURN0AND1))
+            {
+                continue;
+            }
+
+            PointType added_pt;
+            added_pt.x = pl_orig.points[i].x;
+            added_pt.y = pl_orig.points[i].y;
+            added_pt.z = pl_orig.points[i].z;
+            added_pt.intensity = pl_orig.points[i].intensity;
+            added_pt.curvature = pl_orig.points[i].timestamp / float(1000000); // use curvature as time
+
+            pl_buff[pl_orig.points[i].line].push_back(added_pt);
+        }
+
+        for (int j = 0; j < N_SCANS; j++)
+        {
+            if (pl_buff[j].size() <= 5) continue;
+
+            pcl::PointCloud<PointType>& pl = pl_buff[j];
+            plsize = pl.size();
+            std::vector<orgtype>& types = typess[j];
+            types.clear();
+            types.resize(plsize);
+
+            for (uint i = 0; i < plsize - 1; i++)
+            {
+                types[i].range = pl[i].x * pl[i].x + pl[i].y * pl[i].y;
+                float vx = pl[i].x - pl[i + 1].x;
+                float vy = pl[i].y - pl[i + 1].y;
+                float vz = pl[i].z - pl[i + 1].z;
+                types[i].dista = vx * vx + vy * vy + vz * vz;
+            }
+
+            types[plsize - 1].range = pl[plsize - 1].x * pl[plsize - 1].x + pl[plsize - 1].y * pl[plsize - 1].y;
+            give_feature(pl, types);
+        }
+    }
+    else
+    {
+        for (uint i = 1; i < plsize; i++)
+        {
+            if ((pl_orig.points[i].line < N_SCANS) &&
+                ((pl_orig.points[i].tag & 0x30) == 0x10 || (pl_orig.points[i].tag & 0x30) == 0x00))
+            {
+                valid_num++;
+                if (valid_num % point_filter_num == 0)
+                {
+                    PointType added_pt;
+                    added_pt.x = pl_orig.points[i].x;
+                    added_pt.y = pl_orig.points[i].y;
+                    added_pt.z = pl_orig.points[i].z;
+                    added_pt.intensity = pl_orig.points[i].intensity;
+                    added_pt.curvature = pl_orig.points[i].timestamp / float(1000000); // curvature unit: ms
+
+                    if (((abs(added_pt.x - pl_surf.back().x) > 1e-7) ||
+                         (abs(added_pt.y - pl_surf.back().y) > 1e-7) ||
+                         (abs(added_pt.z - pl_surf.back().z) > 1e-7)) &&
+                        (added_pt.x * added_pt.x + added_pt.y * added_pt.y + added_pt.z * added_pt.z > (blind * blind)))
+                    {
+                        pl_surf.push_back(added_pt);
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 void Preprocess::oust64_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
