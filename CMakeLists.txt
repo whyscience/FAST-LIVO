@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.4)
 project(fast_livo)
 
 SET(CMAKE_BUILD_TYPE "Debug")
@@ -52,7 +52,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   pcl_ros
   tf
-  livox_ros_driver
+  livox_ros_driver2
   message_generation
   eigen_conversions
   vikit_common
